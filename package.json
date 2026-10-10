@@ -1,0 +1,16 @@
+{
+  "name": "visionos",
+  "version": "1.0.0",
+  "description": "VisionOS - A Gemma 4-Powered, Goal-Oriented Computer Interface for Visually Impaired Users",
+  "scripts": {
+    "server": "npm --prefix server start",
+    "server:dev": "npm --prefix server run dev",
+    "electron": "npm --prefix electron run dev",
+    "test": "npm --prefix server run test:e2e",
+    "test:e2e": "npm --prefix server run test:e2e",
+    "build": "npm --prefix server run build && npm --prefix electron run build"
+  },
+  "devDependencies": {
+    "tailwindcss": "^4.1.18"
+  }
+}

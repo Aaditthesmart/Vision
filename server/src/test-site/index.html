@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VisionOS Deterministic Accessibility Test Bench</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --border: #334155;
+      --danger: #ef4444;
+      --success: #10b981;
+      --warning: #f59e0b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 24px;
+    }
+
+    header {
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    nav {
+      display: flex;
+      gap: 16px;
+    }
+
+    nav a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+    }
+
+    nav a:hover, nav a:focus {
+      background: var(--border);
+      outline: 2px solid var(--accent);
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 860px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .section-box {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    h1, h2, h3 {
+      color: #ffffff;
+      margin-bottom: 12px;
+    }
+
+    .filter-bar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+      background: rgba(0,0,0,0.2);
+      padding: 12px;
+      border-radius: 8px;
+    }
+
+    label {
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    select, input, textarea, button {
+      background: #0f172a;
+      color: #ffffff;
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    select:focus, input:focus, textarea:focus, button:focus {
+      outline: 3px solid var(--accent);
+      outline-offset: 2px;
+      border-color: var(--accent);
+    }
+
+    button {
+      background: var(--accent);
+      color: #0f172a;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: var(--accent-hover);
+      color: #ffffff;
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+    }
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+
+    .product-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .product-card {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: border-color 0.2s;
+    }
+
+    .product-card:focus-within {
+      border-color: var(--accent);
+      outline: 2px solid var(--accent);
+    }
+
+    .price-tag {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--success);
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .alert-banner {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid var(--danger);
+      color: #fca5a5;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-top: 16px;
+      display: none;
+    }
+
+    .alert-banner.active {
+      display: block;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+      background: rgba(56, 189, 248, 0.2);
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <header role="banner">
+    <div>
+      <h1>VisionOS Test Bench</h1>
+      <p style="color: var(--text-muted); font-size: 14px;">Deterministic Accessible Test Environment for Gemma 4</p>
+    </div>
+    <nav role="navigation" aria-label="Primary Navigation">
+      <a href="#products">Products</a>
+      <a href="#form-section">Application Form</a>
+      <a href="#article-section">Documentation</a>
+      <a href="#recovery-demo">Failure Scenarios</a>
+    </nav>
+  </header>
+
+  <main role="main">
+    <!-- SECTION 1: PRODUCTS & PRICE FILTER -->
+    <section class="section-box" id="products" aria-labelledby="products-heading">
+      <h2 id="products-heading">Audio & Electronics Catalog</h2>
+      <p style="color: var(--text-muted); margin-bottom: 12px;">Browse accessible product cards with filtered prices.</p>
+
+      <div class="filter-bar" role="search" aria-label="Product Filters">
+        <label for="price-filter">Price Filter:</label>
+        <select id="price-filter" name="price" aria-label="Filter products by maximum price" onchange="filterProducts(this.value)">
+          <option value="all">All Prices</option>
+          <option value="2000">Under ₹2,000</option>
+          <option value="5000">Under ₹5,000</option>
+          <option value="10000">Under ₹10,000</option>
+        </select>
+
+        <label for="search-input" style="margin-left: 8px;">Search:</label>
+        <input type="text" id="search-input" placeholder="e.g. headphones" aria-label="Search catalog" />
+      </div>
+
+      <div class="product-grid" id="product-list" role="region" aria-label="Search Results">
+        <!-- Result 1 -->
+        <article class="product-card" data-testid="result-1" data-price="3499">
+          <div>
+            <h3>1. Sony WH-CH520 Wireless Headphones</h3>
+            <p style="color: var(--text-muted); font-size: 13px;">50-hour battery life, DSEE upscaling, lightweight comfort.</p>
+          </div>
+          <div style="text-align: right;">
+            <div class="price-tag">₹3,499</div>
+            <button onclick="alert('Added Sony WH-CH520 to cart')" aria-label="Add Sony WH-CH520 to cart" style="margin-top: 6px;">Add to Cart</button>
+          </div>
+        </article>
+
+        <!-- Result 2 -->
+        <article class="product-card" data-testid="result-2" data-price="1899">
+          <div>
+            <h3>2. boAt Rockerz 450 Bluetooth On-Ear</h3>
+            <p style="color: var(--text-muted); font-size: 13px;">Cheapest wireless option: 15-hour playback, 40mm drivers.</p>
+          </div>
+          <div style="text-align: right;">
+            <div class="price-tag">₹1,899</div>
+            <button onclick="alert('Added boAt Rockerz 450 to cart')" aria-label="Add boAt Rockerz 450 to cart" style="margin-top: 6px;">Add to Cart</button>
+          </div>
+        </article>
+
+        <!-- Result 3 -->
+        <article class="product-card" data-testid="result-3" data-price="7990">
+          <div>
+            <h3>3. JBL Live 660NC Noise Cancelling</h3>
+            <p style="color: var(--text-muted); font-size: 13px;">Adaptive noise cancelling, ambient aware, 50h battery.</p>
+          </div>
+          <div style="text-align: right;">
+            <div class="price-tag">₹7,990</div>
+            <button onclick="alert('Added JBL Live 660NC to cart')" aria-label="Add JBL Live 660NC to cart" style="margin-top: 6px;">Add to Cart</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- SECTION 2: ACCESSIBLE APPLICATION FORM -->
+    <section class="section-box" id="form-section" aria-labelledby="form-heading">
+      <h2 id="form-heading">Accessibility Assistance Application</h2>
+      <p style="color: var(--text-muted); margin-bottom: 14px;">Fill in your contact details below. Form will NOT be submitted without confirmation.</p>
+
+      <form id="accessible-app-form" aria-label="User Registration Form" onsubmit="event.preventDefault(); submitForm();">
+        <div class="form-group">
+          <label for="name">Full Name <span style="color: var(--danger)">*</span></label>
+          <input type="text" id="name" name="name" placeholder="Jordan Smith" required aria-required="true" />
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email Address <span style="color: var(--danger)">*</span></label>
+          <input type="email" id="email" name="email" placeholder="jordan@example.com" required aria-required="true" />
+        </div>
+
+        <div class="form-group">
+          <label for="phone">Phone Number</label>
+          <input type="tel" id="phone" name="phone" placeholder="+1-555-0199" />
+        </div>
+
+        <div class="form-group">
+          <label for="comments">Accessibility Notes</label>
+          <textarea id="comments" name="comments" rows="3" placeholder="Preferred screen reader or font size..."></textarea>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 16px;">
+          <button type="submit" id="submit-btn" class="btn-danger" aria-label="Submit Application (Consequential)">Submit Application</button>
+          <button type="button" onclick="document.getElementById('accessible-app-form').reset();" style="background: transparent; border: 1px solid var(--border);">Reset Form</button>
+        </div>
+      </form>
+
+      <div id="form-success-banner" class="alert-banner" role="status" style="border-color: var(--success); color: #86efac; background: rgba(16, 185, 129, 0.15);">
+        Application successfully recorded for verification.
+      </div>
+    </section>
+
+    <!-- SECTION 3: ARTICLE WITH HEADING HIERARCHY -->
+    <section class="section-box" id="article-section" aria-labelledby="doc-heading">
+      <h2 id="doc-heading">Article: Goal-Oriented Accessibility in 2026</h2>
+      <article>
+        <h3>1. The Problem with Sequential Screen Readers</h3>
+        <p style="color: var(--text-muted); margin-bottom: 10px;">
+          Traditional assistive technologies force users to navigate interface elements sequentially through every header, link, and banner before reaching the core task.
+        </p>
+
+        <h3>2. The Gemma 4 Approach</h3>
+        <p style="color: var(--text-muted); margin-bottom: 10px;">
+          VisionOS combines local Gemma 4 reasoning with bounded browser automation to directly locate requested elements, summarize key content, and verify actions.
+        </p>
+
+        <h3>3. Zero-Paid-API & Privacy</h3>
+        <p style="color: var(--text-muted);">
+          All natural-language processing runs locally via Ollama on commodity Windows 11 hardware without sending sensitive DOM contents to cloud providers.
+        </p>
+      </article>
+    </section>
+
+    <!-- SECTION 4: FAILURE RECOVERY & APPROVAL DEMO -->
+    <section class="section-box" id="recovery-demo" aria-labelledby="recovery-heading">
+      <h2 id="recovery-heading">Recovery & Edge Case Scenarios</h2>
+      <p style="color: var(--text-muted); margin-bottom: 12px;">Deterministic triggers for automated failure recovery testing.</p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button onclick="toggleMissingElement()" style="background: #334155;">Toggle Missing Promo Code Field</button>
+        <div id="dynamic-promo-field" style="display: none; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 6px;">
+          <label for="promo-code">Promo Code:</label>
+          <input type="text" id="promo-code" placeholder="SAVE20" />
+        </div>
+
+        <button onclick="simulateDynamicError()" class="btn-danger">Simulate Dynamic Page Error</button>
+        <div id="error-alert" class="alert-banner" role="alert">
+          <strong>Error 404:</strong> The requested coupon service is currently offline. Please proceed to normal checkout.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    function filterProducts(maxPrice) {
+      const cards = document.querySelectorAll('.product-card');
+      cards.forEach(card => {
+        const price = parseInt(card.getAttribute('data-price'), 10);
+        if (maxPrice === 'all' || price <= parseInt(maxPrice, 10)) {
+          card.style.display = 'flex';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    function submitForm() {
+      const banner = document.getElementById('form-success-banner');
+      banner.style.display = 'block';
+    }
+
+    function toggleMissingElement() {
+      const el = document.getElementById('dynamic-promo-field');
+      el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function simulateDynamicError() {
+      const alertEl = document.getElementById('error-alert');
+      alertEl.classList.toggle('active');
+    }
+  </script>
+</body>
+</html>

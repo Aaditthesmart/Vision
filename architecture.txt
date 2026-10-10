@@ -1,0 +1,33 @@
+This high-level architecture describes a **Voice-First, Event-Driven Browser Agent**. It separates the system into distinct "organs"—Ears, Brain, Hands, and Mouth—to ensure low latency and modularity.
+
+### **1. The Client Layer (The Ears & Mouth)**
+
+* **Role:** A lightweight "dumb terminal" responsible solely for Input/Output.
+* **Input:** The **Web Speech API** captures user audio and converts it to text immediately.
+* **Output:** The **Cartesia Player** streams raw audio chunks for near-instant playback, minimizing the delay between the AI "thinking" and "speaking."
+* **Tech:** Next.js (React).
+
+### **2. The Server Layer (The Orchestrator)**
+
+* **Role:** The central nervous system that maintains the connection and state.
+* **Connectivity:** Uses **Socket.io** to keep a persistent, bi-directional connection with the client (essential for interrupting the AI).
+* **Logic:** The **LangGraph Supervisor** acts as the router. It analyzes the user's intent (e.g., "Buy this" vs. "Is this safe?") and delegates the task to the correct specialist.
+* **Tech:** Node.js, Express, LangGraph.
+
+### **3. The Agent Layer (The Specialists)**
+
+* **Role:** Isolated logic modules that handle specific domain tasks.
+* **Commerce Agent:** Specialized for the **Visa Track**. Handles cart validation, checkout flows, and budget checks.
+* **Medical Agent:** Specialized for the **OpenEvidence Track**. Scans pages for drug interactions and medical safety.
+* **General Agent:** Handles standard navigation, summarization, and scrolling.
+
+### **4. The Execution Layer (The Hands)**
+
+* **Role:** The interface that actually touches the web page.
+* **Control:** **Stagehand** receives high-level commands (e.g., "Click the buy button") and translates them into low-level browser actions.
+* **Visibility:** It controls a **Visible Chromium** instance, allowing judges to see the "ghost" user navigating in real-time.
+
+### **5. Audio Services (The Voice)**
+
+* **Role:** providing human-quality voice with emotional range.
+* **Cartesia:** Generates audio in **<100ms**, allowing the system to feel conversational rather than robotic.

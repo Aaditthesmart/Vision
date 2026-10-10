@@ -1,0 +1,20 @@
+
+Port 5174 is in use, trying another one...
+
+  VITE v6.4.1  ready in 120 ms
+
+  ➜  Local:   http://localhost:5175/
+  ➜  Network: use --host to expose
+  ➜  press h + enter to show help
+6:38:51 PM [vite] (client) hmr update /src/components/AudioVisualizer.tsx
+6:41:17 PM [vite] (client) hmr update /src/components/AudioVisualizer.tsx (x2)
+6:42:40 PM [vite] (client) hmr update /src/components/AudioVisualizer.tsx (x3)
+6:43:10 PM [vite] (client) hmr update /src/components/AudioVisualizer.tsx (x4)
+6:44:30 PM [vite] (client) hmr update /src/components/AudioVisualizer.tsx (x5)
+6:45:03 PM [vite] (client) hmr update /src/components/AudioVisualizer.tsx (x6)
+6:48:57 PM [vite] (client) hmr update /src/components/AudioVisualizer.tsx (x7)
+6:49:38 PM [vite] (client) hmr update /src/components/AudioVisualizer.tsx (x8)
+6:53:48 PM [vite] (client) hmr update /src/components/AudioVisualizer.tsx (x9)
+6:54:05 PM [vite] (client) hmr updrc/components/AudioVisualizer.tsx (x10)
+6:54:11 PM [vite] (client) hmr update /src/components/AudioVisualizer.tsx (x11)
+6:54:15 PM [vite] (client) hmr update /src/index.css

@@ -1,0 +1,5 @@
+fetchai
+python-dotenv
+uagents
+uagents-core
+requests

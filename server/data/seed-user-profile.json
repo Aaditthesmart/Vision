@@ -1,0 +1,13 @@
+{
+  "name": "Alex",
+  "preferences": {
+    "budget": "500",
+    "currency": "USD",
+    "preferredStores": "Amazon, Best Buy",
+    "language": "en"
+  },
+  "accessibility": {
+    "screenReader": true,
+    "voiceOnly": true
+  }
+}

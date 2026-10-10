@@ -1,0 +1,53 @@
+{
+  "name": "rcy-electron",
+  "version": "1.0.0",
+  "description": "Voice Agent Electron Overlay with Liquid Glass Effect",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\" --names \"vite,electron\" --prefix-colors \"magenta,cyan\"",
+    "dev:renderer": "vite",
+    "dev:electron": "npm run build:main && wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
+    "build": "npm run build:main && npm run build:renderer",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "vite build",
+    "start": "electron .",
+    "package": "electron-builder",
+    "launch": "./start.sh"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "liquid-glass-react": "^1.0.0",
+    "lucide-react": "^0.564.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.1",
+    "electron-builder": "^24.13.3",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.0.7",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.rcy.voiceagent",
+    "productName": "RCY Voice Agent",
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity"
+    }
+  }
+}
