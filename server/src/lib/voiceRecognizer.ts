@@ -6,6 +6,8 @@
 
 import { spawn, type ChildProcess } from "child_process";
 import { EventEmitter } from "events";
+import * as path from "path";
+import * as fs from "fs";
 
 export interface VoiceRecognitionResult {
   transcript: string;
@@ -15,64 +17,72 @@ export interface VoiceRecognitionResult {
 export class VoiceRecognizer extends EventEmitter {
   private psProcess: ChildProcess | null = null;
   private isListening = false;
+  private scriptPath: string;
 
   constructor() {
     super();
+    // Ensure scripts directory exists
+    const scriptsDir = path.join(__dirname, "..", "..", "scripts");
+    if (!fs.existsSync(scriptsDir)) {
+      fs.mkdirSync(scriptsDir, { recursive: true });
+    }
+    this.scriptPath = path.join(scriptsDir, "voice_recognizer.ps1");
+
+    const psContent = `
+Add-Type -AssemblyName System.Speech
+try {
+    $rec = New-Object System.Speech.Recognition.SpeechRecognitionEngine
+    $rec.SetInputToDefaultAudioDevice()
+    $grammar = New-Object System.Speech.Recognition.DictationGrammar
+    $rec.LoadGrammar($grammar)
+    [Console]::WriteLine("READY_FOR_SPEECH")
+    [Console]::Out.Flush()
+    
+    while ($true) {
+        $result = $rec.Recognize([System.TimeSpan]::FromSeconds(2))
+        if ($null -ne $result) {
+            $txt = $result.Text
+            $conf = $result.Confidence
+            if (-not [string]::IsNullOrWhiteSpace($txt)) {
+                [Console]::WriteLine("SPEECH:" + $conf + ":" + $txt)
+                [Console]::Out.Flush()
+            }
+        }
+    }
+} catch {
+    [Console]::WriteLine("ERROR:" + $_.Exception.Message)
+    [Console]::Out.Flush()
+}
+`.trim();
+
+    fs.writeFileSync(this.scriptPath, psContent, "utf-8");
   }
 
   /**
    * Start listening to the default microphone.
-   * Emits:
-   * - "listening_started"
-   * - "transcript" (string)
-   * - "listening_stopped"
-   * - "error" (string)
    */
   public start(): void {
     if (this.isListening) {
+      console.log("[VoiceRecognizer] Already listening");
       return;
     }
 
     this.isListening = true;
     this.emit("listening_started");
-
-    // PowerShell script that loads System.Speech and runs continuous speech recognition
-    const script = `
-Add-Type -AssemblyName System.Speech
-try {
-  $rec = New-Object System.Speech.Recognition.SpeechRecognitionEngine
-  $rec.SetInputToDefaultAudioDevice()
-  $dictation = New-Object System.Speech.Recognition.DictationGrammar
-  $rec.LoadGrammar($dictation)
-  Write-Output "READY_FOR_SPEECH"
-
-  Register-ObjectEvent -InputObject $rec -EventName "SpeechRecognized" -Action {
-    $txt = $Event.SourceEventArgs.Result.Text
-    $conf = $Event.SourceEventArgs.Result.Confidence
-    Write-Output "SPEECH:$conf:$txt"
-  } | Out-Null
-
-  Register-ObjectEvent -InputObject $rec -EventName "SpeechHypothesized" -Action {
-    $txt = $Event.SourceEventArgs.Result.Text
-    Write-Output "HYPO:$txt"
-  } | Out-Null
-
-  $rec.RecognizeAsync([System.Speech.Recognition.RecognizeMode]::Multiple)
-  
-  # Keep process alive until standard input is closed or stop signal
-  while ($true) {
-    Start-Sleep -Milliseconds 200
-  }
-} catch {
-  Write-Output ("ERROR:" + $_.Exception.Message)
-}
-`.trim();
+    console.log("[VoiceRecognizer] Starting Windows Speech Recognition engine...");
 
     try {
       this.psProcess = spawn(
         "powershell.exe",
-        ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
-        { stdio: ["pipe", "pipe", "pipe"], shell: false },
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          this.scriptPath,
+        ],
+        { stdio: ["ignore", "pipe", "pipe"], shell: false },
       );
 
       this.psProcess.stdout?.on("data", (data: Buffer) => {
@@ -88,13 +98,8 @@ try {
             const confidence = parseFloat(parts[0]) || 0.8;
             const text = parts.slice(1).join(":").trim();
             if (text) {
-              console.log(`[VoiceRecognizer] Recognized: "${text}" (conf: ${confidence})`);
+              console.log(`[VoiceRecognizer] Recognized speech: "${text}" (conf: ${confidence})`);
               this.emit("transcript", { transcript: text, confidence });
-            }
-          } else if (trimmed.startsWith("HYPO:")) {
-            const text = trimmed.slice(5).trim();
-            if (text) {
-              this.emit("interim", text);
             }
           } else if (trimmed.startsWith("ERROR:")) {
             console.error("[VoiceRecognizer] Error from engine:", trimmed);
@@ -111,7 +116,7 @@ try {
       });
 
       this.psProcess.on("close", (code) => {
-        console.log(`[VoiceRecognizer] Process closed with code ${code}`);
+        console.log(`[VoiceRecognizer] Process exited with code ${code}`);
         this.isListening = false;
         this.psProcess = null;
         this.emit("listening_stopped");
@@ -130,10 +135,11 @@ try {
    */
   public stop(): void {
     if (!this.isListening && !this.psProcess) return;
+    console.log("[VoiceRecognizer] Stopping voice engine...");
     this.isListening = false;
     if (this.psProcess) {
       try {
-        this.psProcess.kill();
+        this.psProcess.kill("SIGTERM");
       } catch {
         // ignore
       }
