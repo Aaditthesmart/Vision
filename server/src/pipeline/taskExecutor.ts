@@ -94,16 +94,26 @@ export class TaskExecutor {
 
       // ── System Control & Voice Actions: Short-circuit for Windows-native actions ──
 
-      // 1. Write Code (in VS Code or active editor)
+      // 1. Write Code (in VS Code with AI code generation)
       if (goal.intentCategory === "write_code") {
+        emit("agent_status", "thinking");
+        emit("assistant_message", {
+          role: "assistant",
+          text: "Generating code with Gemma 4...",
+          speechText: "Generating code.",
+        });
+
+        const generated = await gemma4Engine.generateCode(userInput);
         emit("agent_status", "executing");
-        const codeText = goal.targetLabelOrText || userInput;
-        const result = await windowsControl.writeCodeInVSCode(codeText);
+        
+        const result = await windowsControl.writeCodeInVSCode(generated.code, generated.fileName);
         emit("agent_status", "idle");
+        
         const msg = result.success
-          ? `✅ ${result.output || `Wrote code into VS Code: "${codeText.substring(0, 50)}..."`}`
+          ? `✅ Generated ${generated.language} code for ${generated.summary}. Created "${generated.fileName}" on Desktop and opened in Visual Studio Code.`
           : `❌ Failed to write code into VS Code: ${result.error}`;
-        emit("assistant_message", { role: "assistant", text: msg, speechText: msg });
+        
+        emit("assistant_message", { role: "assistant", text: msg, speechText: `Created ${generated.fileName} in Visual Studio Code. ${generated.summary}` });
         emit("task_completed", { success: result.success, message: msg, stepsExecuted: 1 });
         return { success: result.success, message: msg };
       }
@@ -122,7 +132,51 @@ export class TaskExecutor {
         return { success: result.success, message: msg };
       }
 
-      // 3. Type text into active window
+      // 3. YouTube Search & Auto-Play Video
+      if (goal.intentCategory === "navigate" && goal.targetLabelOrText?.includes("youtube.com/results")) {
+        emit("agent_status", "executing");
+        const queryMatch = goal.targetLabelOrText.match(/search_query=([^&]+)/);
+        const query = queryMatch ? decodeURIComponent(queryMatch[1]) : userInput.replace(/.*youtube/i, "").trim();
+        
+        emit("assistant_message", {
+          role: "assistant",
+          text: `Searching YouTube for "${query}" and playing video...`,
+          speechText: `Searching YouTube for ${query}.`,
+        });
+
+        const ytResult = await browserAutomation.searchAndPlayYouTube(query);
+        emit("agent_status", "idle");
+
+        const msg = ytResult.success
+          ? `🎬 Playing on YouTube: "${ytResult.videoTitle}"`
+          : `✅ Opened YouTube search for "${query}".`;
+        
+        emit("assistant_message", { role: "assistant", text: msg, speechText: ytResult.success ? `Playing ${ytResult.videoTitle}` : `Opened YouTube for ${query}` });
+        emit("task_completed", { success: true, message: msg, stepsExecuted: 2 });
+        return { success: true, message: msg };
+      }
+
+      // 4. Google Search & Spoken Summary Extraction
+      if (goal.intentCategory === "navigate" && goal.targetLabelOrText?.includes("google.com/search")) {
+        emit("agent_status", "executing");
+        const queryMatch = goal.targetLabelOrText.match(/q=([^&]+)/);
+        const query = queryMatch ? decodeURIComponent(queryMatch[1]) : userInput.replace(/^search\s+/i, "").trim();
+
+        emit("assistant_message", {
+          role: "assistant",
+          text: `Searching Google for "${query}"...`,
+          speechText: `Searching Google for ${query}.`,
+        });
+
+        const gResult = await browserAutomation.searchGoogleAndGetSummary(query);
+        emit("agent_status", "idle");
+
+        emit("assistant_message", { role: "assistant", text: `🔍 Google Results for "${query}":\n${gResult.summary}`, speechText: gResult.summary });
+        emit("task_completed", { success: true, message: gResult.summary, stepsExecuted: 1 });
+        return { success: true, message: gResult.summary };
+      }
+
+      // 5. Type text into active window
       if (goal.intentCategory === "type_text") {
         emit("agent_status", "executing");
         const textToType = goal.targetLabelOrText || "";
@@ -136,7 +190,7 @@ export class TaskExecutor {
         return { success: result.success, message: msg };
       }
 
-      // 4. System control (screenshot, volume, shortcuts, window management)
+      // 6. System control (screenshot, volume, shortcuts, window management)
       if (goal.intentCategory === "system_control") {
         emit("agent_status", "executing");
         const payload = goal.systemPayload || {};

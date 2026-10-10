@@ -18,9 +18,29 @@ export interface SystemActionResult {
 
 class WindowsControl {
   /**
+   * Find the actual installed path for VS Code executable on Windows.
+   */
+  public getVSCodePath(): string {
+    const candidatePaths = [
+      path.join(os.homedir(), "AppData", "Local", "Programs", "Microsoft VS Code", "bin", "code.cmd"),
+      path.join(os.homedir(), "AppData", "Local", "Programs", "Microsoft VS Code", "Code.exe"),
+      "C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd",
+      "C:\\Program Files\\Microsoft VS Code\\Code.exe",
+      "C:\\Program Files (x86)\\Microsoft VS Code\\bin\\code.cmd",
+    ];
+
+    for (const p of candidatePaths) {
+      if (fs.existsSync(p)) {
+        return p;
+      }
+    }
+    return "code";
+  }
+
+  /**
    * Run a PowerShell command and capture output.
    */
-  public async runPS(script: string, timeoutMs = 12000): Promise<SystemActionResult> {
+  public async runPS(script: string, timeoutMs = 15000): Promise<SystemActionResult> {
     return new Promise((resolve) => {
       const ps = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], {
         stdio: ["ignore", "pipe", "pipe"],
@@ -87,15 +107,15 @@ class WindowsControl {
     };
 
     const key = appName.toLowerCase().trim();
+    if (key.includes("vs code") || key.includes("vscode") || key.includes("visual studio code")) {
+      return this.openVSCode();
+    }
+
     const exe = nameMap[key] || appName;
 
     // Special case for ms-settings
     if (exe.startsWith("ms-settings:")) {
       return this.runPS(`Start-Process "${exe}"`);
-    }
-
-    if (key.includes("vs code") || key.includes("vscode") || key.includes("visual studio code")) {
-      return this.openVSCode();
     }
 
     return this.runPS(`Start-Process "${exe}" -ErrorAction SilentlyContinue`);
@@ -105,8 +125,10 @@ class WindowsControl {
    * Open VS Code, optionally with a file or folder path.
    */
   public async openVSCode(pathToOpen?: string): Promise<SystemActionResult> {
-    const target = pathToOpen ? `"${pathToOpen}"` : ".";
-    return this.runPS(`& code ${target} 2>&1; Write-Output "VS Code launched"`);
+    const vsCodeExe = this.getVSCodePath();
+    const target = pathToOpen ? pathToOpen.replace(/'/g, "''") : ".";
+    const script = `& '${vsCodeExe}' '${target}' 2>&1; Write-Output "VS Code launched"`;
+    return this.runPS(script);
   }
 
   /**
@@ -114,27 +136,42 @@ class WindowsControl {
    */
   public async writeCodeInVSCode(code: string, fileName?: string): Promise<SystemActionResult> {
     try {
-      if (fileName) {
-        // Create file in user workspace or Desktop
-        const desktopDir = path.join(os.homedir(), "Desktop");
-        const filePath = path.isAbsolute(fileName) ? fileName : path.join(desktopDir, fileName);
-        fs.writeFileSync(filePath, code, "utf-8");
-        await this.runPS(`& code "${filePath}" 2>&1; Write-Output "Opened ${path.basename(filePath)} in VS Code"`);
-        return { success: true, output: `Created and opened ${path.basename(filePath)} in VS Code with your code.` };
-      }
+      const desktopDir = path.join(os.homedir(), "Desktop");
+      const targetFileName = fileName || "visionos_code.py";
+      const filePath = path.isAbsolute(targetFileName)
+        ? targetFileName
+        : path.join(desktopDir, targetFileName);
 
-      // If no file name, focus VS Code and type/paste the code
-      const focusResult = await this.focusWindow("Visual Studio Code");
-      if (!focusResult.success || focusResult.output?.includes("not found")) {
-        // Launch VS Code and write to a new script
-        const tempFile = path.join(os.homedir(), "Desktop", "visionos_script.py");
-        fs.writeFileSync(tempFile, code, "utf-8");
-        await this.runPS(`& code "${tempFile}" 2>&1`);
-        return { success: true, output: `Wrote code to visionos_script.py on Desktop and opened in VS Code.` };
-      }
+      // Write code file to disk
+      fs.writeFileSync(filePath, code, "utf-8");
 
-      // Paste code via clipboard into active VS Code editor
-      return await this.typeText(code);
+      // Open file in VS Code using resolved executable
+      const vsCodeExe = this.getVSCodePath();
+      const escapedPath = filePath.replace(/'/g, "''");
+      const script = `
+& '${vsCodeExe}' -g '${escapedPath}' 2>&1
+Start-Sleep -Milliseconds 800
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class WinVS {
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+}
+"@
+$proc = Get-Process | Where-Object { $_.ProcessName -eq "Code" -or $_.MainWindowTitle -like "*Visual Studio Code*" } | Select-Object -First 1
+if ($proc) {
+  [WinVS]::ShowWindow($proc.MainWindowHandle, 9)
+  [WinVS]::SetForegroundWindow($proc.MainWindowHandle)
+}
+Write-Output "Opened ${path.basename(filePath)} in Visual Studio Code"
+`.trim();
+
+      const result = await this.runPS(script);
+      return {
+        success: true,
+        output: `Created and opened "${path.basename(filePath)}" in Visual Studio Code with the generated code.`,
+      };
     } catch (err) {
       return { success: false, error: String(err) };
     }
@@ -240,7 +277,7 @@ Write-Output "Screenshot saved to Desktop: VisionOS_Screenshot_${ts}.png"
    * List all currently open application windows.
    */
   public async listOpenWindows(): Promise<SystemActionResult> {
-    const script = `Get-Process | Where-Object {$_.MainWindowTitle -ne ''} | ForEach-Object { "$($_.Name): $($_.MainWindowTitle)" }`;
+    const script = `Get-Process | Where-Object { $_.MainWindowTitle -ne '' } | ForEach-Object { "$($_.Name): $($_.MainWindowTitle)" }`;
     return this.runPS(script);
   }
 
@@ -257,7 +294,7 @@ public class WinAPI {
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 }
 "@
-$proc = Get-Process | Where-Object {$_.MainWindowTitle -like "*${titlePart}*"} | Select-Object -First 1
+$proc = Get-Process | Where-Object { $_.MainWindowTitle -like "*${titlePart}*" -or $_.ProcessName -like "*${titlePart}*" } | Select-Object -First 1
 if ($proc) {
   [WinAPI]::ShowWindow($proc.MainWindowHandle, 9)
   [WinAPI]::SetForegroundWindow($proc.MainWindowHandle)
@@ -279,7 +316,7 @@ if ($proc) {
   ): Promise<SystemActionResult> {
     const nCmdShow = action === "minimize" ? 6 : action === "maximize" ? 3 : 0;
     if (action === "close") {
-      const script = `$proc = Get-Process | Where-Object {$_.MainWindowTitle -like "*${titlePart}*"} | Select-Object -First 1; if ($proc) { $proc.CloseMainWindow(); Write-Output "Closed: $($proc.MainWindowTitle)" } else { Write-Output "Window not found: ${titlePart}" }`;
+      const script = `$proc = Get-Process | Where-Object { $_.MainWindowTitle -like "*${titlePart}*" } | Select-Object -First 1; if ($proc) { $proc.CloseMainWindow(); Write-Output "Closed: $($proc.MainWindowTitle)" } else { Write-Output "Window not found: ${titlePart}" }`;
       return this.runPS(script);
     }
     const script = `
@@ -287,7 +324,7 @@ Add-Type @"
 using System.Runtime.InteropServices;
 public class Win { [DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr h, int n); }
 "@
-$proc = Get-Process | Where-Object {$_.MainWindowTitle -like "*${titlePart}*"} | Select-Object -First 1
+$proc = Get-Process | Where-Object { $_.MainWindowTitle -like "*${titlePart}*" } | Select-Object -First 1
 if ($proc) { [Win]::ShowWindow($proc.MainWindowHandle, ${nCmdShow}); Write-Output "${action}d: $($proc.MainWindowTitle)" } else { Write-Output "Not found: ${titlePart}" }
 `.trim();
     return this.runPS(script, 8000);

@@ -495,6 +495,72 @@ export class BrowserAutomation {
     }
   }
 
+  /**
+   * Search YouTube and automatically click and play the first video result.
+   */
+  public async searchAndPlayYouTube(query: string): Promise<{ success: boolean; videoTitle?: string; error?: string }> {
+    try {
+      await this.init();
+      if (!this.page) throw new Error("Browser page not initialized");
+      const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+      console.log(`[BrowserAutomation] Searching YouTube for: "${query}"`);
+      await this.page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
+      
+      // Wait for video titles to appear
+      const videoSelector = "ytd-video-renderer #video-title, ytd-rich-item-renderer #video-title, a#video-title";
+      await this.page.waitForSelector(videoSelector, { timeout: 10000 });
+      const firstVideo = this.page.locator(videoSelector).first();
+      const videoTitle = (await firstVideo.getAttribute("title")) || (await firstVideo.innerText()) || `${query} on YouTube`;
+      
+      console.log(`[BrowserAutomation] Auto-playing first YouTube video: "${videoTitle}"`);
+      await firstVideo.click();
+      await this.page.waitForTimeout(2500);
+      return { success: true, videoTitle };
+    } catch (err) {
+      console.error("[BrowserAutomation] Failed to play YouTube video:", err);
+      return { success: false, error: String(err) };
+    }
+  }
+
+  /**
+   * Search Google and extract top answer or top 3 search results for screen reader announcement.
+   */
+  public async searchGoogleAndGetSummary(query: string): Promise<{ success: boolean; summary: string; topResults: string[] }> {
+    try {
+      await this.init();
+      if (!this.page) throw new Error("Browser page not initialized");
+      const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+      console.log(`[BrowserAutomation] Searching Google for: "${query}"`);
+      await this.page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
+      await this.page.waitForTimeout(1000);
+
+      const results = await this.page.evaluate(() => {
+        const directAnswer = document.querySelector(".hgKElc, [data-attrid='wa:/description'], .Z0LcW")?.textContent?.trim();
+        const items: string[] = [];
+        document.querySelectorAll("h3").forEach((h3) => {
+          const text = h3.textContent?.trim();
+          if (text && !text.includes("People also ask") && !text.includes("Images") && !text.includes("Videos") && items.length < 4) {
+            items.push(text);
+          }
+        });
+        return { directAnswer, items };
+      });
+
+      let summary = "";
+      if (results.directAnswer) {
+        summary = `Answer: ${results.directAnswer}. Top results: ${results.items.slice(0, 2).join("; ")}`;
+      } else if (results.items.length > 0) {
+        summary = `Found ${results.items.length} top results: ${results.items.join(". Next result: ")}`;
+      } else {
+        summary = `Google search completed for "${query}".`;
+      }
+
+      return { success: true, summary, topResults: results.items };
+    } catch (err) {
+      return { success: false, summary: `Searched for "${query}".`, topResults: [] };
+    }
+  }
+
   public async close(): Promise<void> {
     try {
       if (this.context) await this.context.close();
