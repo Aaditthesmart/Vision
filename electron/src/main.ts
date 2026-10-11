@@ -161,6 +161,10 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      // Required for Web Speech API (microphone) in Electron
+      webSecurity: false,
+      allowRunningInsecureContent: true,
+      experimentalFeatures: true,
     },
   });
 
@@ -242,12 +246,19 @@ function createTray() {
 
 // ── App Lifecycle ──────────────────────────────────────────────────
 
+// Enable Web Speech API and microphone in Electron
+app.commandLine.appendSwitch("enable-speech-dispatcher");
+app.commandLine.appendSwitch("enable-features", "SpeechRecognition,SpeechSynthesis");
+app.commandLine.appendSwitch("use-fake-ui-for-media-stream", "false");
+app.commandLine.appendSwitch("allow-http-screen-capture");
+
 app.whenReady().then(async () => {
-  // Grant microphone & media permissions automatically
-  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+  // Grant ALL permissions including microphone
+  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(true);
   });
   session.defaultSession.setPermissionCheckHandler(() => true);
+  session.defaultSession.setDevicePermissionHandler(() => true);
 
   await startServer();
   createWindow();

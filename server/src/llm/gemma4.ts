@@ -442,241 +442,183 @@ OUTPUT JSON ONLY with this structure:
 
   // ── Deterministic Heuristic Fallbacks (Zero-Cloud / Offline Safety) ──
 
-  private fallbackInterpretGoal(
-    userInput: string,
-    ctx?: PageContext,
-  ): GoalInterpretation {
+  private fallbackInterpretGoal(userInput: string, ctx?: PageContext): GoalInterpretation {
     const text = userInput.toLowerCase();
-    // 0. VS Code & Code Writing by Voice
-    const vsCodeCodeMatch = userInput.match(/(?:write|put|type|generate|create)?\s*(?:code|python|javascript|typescript|function|script|program)?\s*(?:in|into|on)\s+(?:vs\s*code|vscode|visual\s*studio\s*code|editor)\s*[:,\-]?\s*(.+)/i) ||
-                           userInput.match(/(?:in|into|on)\s+(?:vs\s*code|vscode|visual\s*studio\s*code)\s+(?:write|type|put|create|code)\s*[:,\-]?\s*(.+)/i) ||
-                           userInput.match(/^(?:write|create|generate)\s+code\s*[:,\-]?\s*(.+)/i);
-    if (vsCodeCodeMatch) {
-      const codeContent = vsCodeCodeMatch[1].trim();
-      return {
-        userGoal: userInput,
-        intentCategory: "write_code",
-        targetLabelOrText: codeContent,
-        isConsequential: false,
-        explanation: `Writing code into VS Code: "${codeContent.substring(0, 50)}${codeContent.length > 50 ? "..." : ""}"`,
-      };
-    }
 
-    // 0b. Keyboard Shortcuts & Pressing Keys by Voice
-    const keyMatch = text.match(/^(?:press|hit|send|shortcut)\s+(.+)/i) ||
-                     (text === "save" || text === "save file" || text === "undo" || text === "copy" || text === "paste" || text === "enter" || text === "press enter" || text === "new line" ? [null, text] : null);
+    // Task 38: Cancel
+    if (/^(?:cancel|stop|abort|halt)\s*(?:the\s*)?(?:current\s*)?(?:task|action)?/i.test(text)) {
+      return { userGoal: userInput, intentCategory: "system_control", systemPayload: { action: "cancel_task" }, isConsequential: false, explanation: "Cancelling the current task." };
+    }
+    // Task 40/35: Status report
+    if (text.includes("last action") || text.includes("did it succeed") || text.includes("what have you") || text.includes("did that work") || /^(?:status|what happened)/i.test(text)) {
+      return { userGoal: userInput, intentCategory: "system_control", systemPayload: { action: "get_status" }, isConsequential: false, explanation: "Reporting task status." };
+    }
+    // Task 2: Read screen
+    if (/what.{0,10}on.{0,10}screen/i.test(text) || /(?:read|describe).{0,5}screen/i.test(text)) {
+      return { userGoal: userInput, intentCategory: "system_control", systemPayload: { action: "read_screen" }, isConsequential: false, explanation: "Reading your screen." };
+    }
+    // Task 6: Active window
+    if (/which (?:window|app).{0,10}(?:am i|using)/i.test(text) || /(?:current|active) (?:window|app)/i.test(text) || text === "active window") {
+      return { userGoal: userInput, intentCategory: "system_control", systemPayload: { action: "active_window" }, isConsequential: false, explanation: "Checking active window." };
+    }
+    // Task 4: Switch window
+    const switchMatch = text.match(/(?:switch|go|focus|bring)\s+(?:me\s+)?(?:to|back to|into)\s+(?:my\s+)?(.+?)(?:\s+window)?\s*\.?$/i);
+    if (switchMatch) {
+      const target = switchMatch[1].trim();
+      return { userGoal: userInput, intentCategory: "system_control", systemPayload: { action: "focus_window", window: target }, isConsequential: false, explanation: `Switching to ${target}.` };
+    }
+    // Task 5: Spotify next
+    if (/(?:next|skip)\s+(?:song|track)/i.test(text) || text.includes("next track") || text.includes("next song")) {
+      return { userGoal: userInput, intentCategory: "system_control", systemPayload: { action: "spotify_next" }, isConsequential: false, explanation: "Playing next song on Spotify." };
+    }
+    // Task 1: Chrome search
+    const chromeSearch = text.match(/open\s+chrome\s+and\s+search\s+(?:for\s+)?(.+)/i);
+    if (chromeSearch) {
+      return { userGoal: userInput, intentCategory: "chrome_search", targetLabelOrText: chromeSearch[1].trim(), isConsequential: false, explanation: `Chrome: searching ${chromeSearch[1].trim()}.` };
+    }
+    // Tasks 15/16/20: Write code
+    const codeMatch =
+      userInput.match(/(?:create|write|generate)\s+(?:a\s+)?(?:c\+\+|cpp|python|javascript|typescript|java|html)\s+(?:file|code|program|script)\s+(?:that|which|to|for)\s+(.+)/i) ||
+      userInput.match(/(?:write|type|generate|create)?\s*(?:code|script|program)?\s*(?:in|into|on)\s+(?:vs\s*code|vscode|visual\s*studio\s*code)\s*[:,\-]?\s*(.+)/i) ||
+      userInput.match(/^(?:write|create|generate)\s+code\s*[:,\-]?\s*(.+)/i);
+    if (codeMatch) {
+      return { userGoal: userInput, intentCategory: "write_code", targetLabelOrText: codeMatch[1].trim(), isConsequential: false, explanation: `Writing code: ${codeMatch[1].trim().slice(0, 50)}.` };
+    }
+    // Task 17: Compile and run
+    if (/(?:compile|build)\s+and\s+run/i.test(text) || /^(?:run|execute)\s+(?:my\s+)?(?:code|program|file|script)/i.test(text)) {
+      return { userGoal: userInput, intentCategory: "compile_run", isConsequential: false, explanation: "Compiling and running your code." };
+    }
+    // Task 18/21: Analyze code / fix bug
+    if (/fix\s+(?:the\s+)?(?:error|bug|issue)/i.test(text) || /find\s+(?:the\s+)?bug/i.test(text) || /(?:explain|describe)\s+(?:what\s+)?(?:this\s+)?code\s+does/i.test(text)) {
+      return { userGoal: userInput, intentCategory: "analyze_code", isConsequential: false, explanation: "Analyzing your code." };
+    }
+    // Task 22: Run tests
+    if (/run\s+(?:my\s+)?tests?/i.test(text) || /tests?\s+(?:fail|failed)/i.test(text)) {
+      return { userGoal: userInput, intentCategory: "run_tests", isConsequential: false, explanation: "Running your tests." };
+    }
+    // Task 19: Python project with venv
+    if (/create\s+(?:a\s+)?python\s+project/i.test(text) || /python.*(?:venv|virtual environment)/i.test(text)) {
+      const nm = userInput.match(/(?:named?|called?)\s+["']?([A-Za-z0-9_\-\s]+)["']?/i);
+      return { userGoal: userInput, intentCategory: "create_python_project", targetLabelOrText: nm ? nm[1].trim() : "MyPythonProject", isConsequential: false, explanation: "Creating Python project with venv." };
+    }
+    // Task 20: Build website
+    if (/build\s+(?:a\s+)?(?:basic\s+)?website/i.test(text) || /create\s+(?:a\s+)?(?:basic\s+)?(?:html|web)/i.test(text)) {
+      const nm = userInput.match(/(?:named?|called?)\s+["']?([A-Za-z0-9_\-\s]+)["']?/i);
+      return { userGoal: userInput, intentCategory: "create_website", targetLabelOrText: nm ? nm[1].trim() : "MyWebsite", isConsequential: false, explanation: "Building a website with HTML, CSS, JS." };
+    }
+    // Task 23: Create folder
+    if (/(?:create|make)\s+(?:a\s+)?(?:new\s+)?folder/i.test(text)) {
+      const nm = userInput.match(/folder\s+(?:called?|named?)\s+([^.]+?)(?:\.|$)/i) || userInput.match(/create\s+(?:a\s+)?(?:new\s+)?folder\s+(.+)/i);
+      return { userGoal: userInput, intentCategory: "file_ops", systemPayload: { action: "create_folder", folderName: nm ? nm[1].trim() : "New Folder" }, isConsequential: false, explanation: "Creating folder." };
+    }
+    // Task 24: Find file
+    if (/find\s+(?:my\s+)?(?:\w+\s+)?(?:file|document|assignment)/i.test(text)) {
+      const qm = userInput.match(/find\s+(?:my\s+)?(.+?)(?:\s+in\s+|\s+on\s+|$)/i);
+      return { userGoal: userInput, intentCategory: "file_ops", systemPayload: { action: "find_file", query: qm ? qm[1].trim() : userInput }, isConsequential: false, explanation: "Searching for file." };
+    }
+    // Task 26: Create notes
+    if (/create\s+(?:a\s+)?(?:text\s+)?(?:notes?\s+)?file/i.test(text) || /(?:take|write)\s+(?:a\s+)?note/i.test(text)) {
+      return { userGoal: userInput, intentCategory: "file_ops", systemPayload: { action: "create_notes" }, isConsequential: false, explanation: "Creating notes file." };
+    }
+    // Task 27: Recent file
+    if (/(?:recently|most recently)\s+(?:edited|modified)/i.test(text) || /file.*(?:edited|modified).*(?:recently|last)/i.test(text)) {
+      return { userGoal: userInput, intentCategory: "file_ops", systemPayload: { action: "recent_file" }, isConsequential: false, explanation: "Finding most recently edited file." };
+    }
+    // Task 28: Open folder in VS Code
+    if (/open.{0,20}(?:folder|project).{0,20}(?:vs\s*code|vscode)/i.test(text)) {
+      const nm = userInput.match(/open\s+(?:my\s+)?(.+?)\s+(?:folder|project)\s+in/i);
+      return { userGoal: userInput, intentCategory: "file_ops", systemPayload: { action: "open_in_vscode", folderName: nm ? nm[1].trim() : "" }, isConsequential: false, explanation: "Opening project in VS Code." };
+    }
+    // Shortcuts
+    const shortcutKeys = ["save", "save file", "undo", "copy", "paste", "enter", "press enter", "new line", "escape"];
+    const keyMatch = text.match(/^(?:press|hit|shortcut)\s+(.+)/i) || (shortcutKeys.includes(text) ? [null, text] : null);
     if (keyMatch) {
-      const keyName = (keyMatch[1] || text).trim();
-      return {
-        userGoal: userInput,
-        intentCategory: "system_control",
-        systemPayload: { action: "shortcut", shortcut: keyName },
-        isConsequential: keyName.includes("delete") || keyName.includes("close"),
-        explanation: `Pressing ${keyName}.`,
-      };
+      const k = (keyMatch[1] || text).trim();
+      return { userGoal: userInput, intentCategory: "system_control", systemPayload: { action: "shortcut", shortcut: k }, isConsequential: k.includes("delete"), explanation: `Pressing ${k}.` };
     }
-
-    // 0c. Web Navigation & Video/Web Search (YouTube, Google, websites)
-    const ytMatch = text.match(/(?:open|go to|play|search\s+on|search)\s+youtube(?:\s+(?:and\s+search(?:\s+for)?|for)?\s*(.+))?/i) ||
-                    (text.includes("youtube") ? [null, text.replace(/.*youtube\s*(?:search(?:\s+for)?)?/i, "").trim()] : null);
+    // YouTube
+    const ytMatch = text.match(/(?:open|play|search)\s+youtube(?:\s+(?:for|and\s+search\s+for)?\s*(.+))?/i) || (text.includes("youtube") ? [null, text.replace(/.*youtube\s*/i, "").trim()] : null);
     if (ytMatch) {
-      const query = (ytMatch[1] || "").trim();
-      const targetUrl = query
-        ? `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
-        : "https://www.youtube.com";
-      return {
-        userGoal: userInput,
-        intentCategory: "navigate",
-        targetLabelOrText: targetUrl,
-        isConsequential: false,
-        explanation: query
-          ? `Opening YouTube and searching for "${query}".`
-          : "Opening YouTube.",
-      };
+      const q = (ytMatch[1] || "").trim();
+      const ytUrl = q ? `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}` : "https://www.youtube.com";
+      return { userGoal: userInput, intentCategory: "navigate", targetLabelOrText: ytUrl, isConsequential: false, explanation: q ? `YouTube: ${q}.` : "Opening YouTube." };
     }
-
-    const googleMatch = text.match(/(?:open|go to|search\s+on)\s+google(?:\s+(?:and\s+search(?:\s+for)?|for)?\s*(.+))?/i) ||
-                        text.match(/^search\s+(?:for\s+)?(.+)/i);
-    if (googleMatch) {
-      const query = (googleMatch[1] || "").trim();
-      const targetUrl = query
-        ? `https://www.google.com/search?q=${encodeURIComponent(query)}`
-        : "https://www.google.com";
-      return {
-        userGoal: userInput,
-        intentCategory: "navigate",
-        targetLabelOrText: targetUrl,
-        isConsequential: false,
-        explanation: query
-          ? `Searching Google for "${query}".`
-          : "Opening Google.",
-      };
+    // Google
+    const gMatch = text.match(/(?:open|search\s+on)\s+google(?:\s+(?:for|and\s+search\s+for)?\s*(.+))?/i) || text.match(/^search\s+(?:for\s+)?(.+)/i);
+    if (gMatch) {
+      const q = (gMatch[1] || "").trim();
+      const gUrl = q ? `https://www.google.com/search?q=${encodeURIComponent(q)}` : "https://www.google.com";
+      return { userGoal: userInput, intentCategory: "navigate", targetLabelOrText: gUrl, isConsequential: false, explanation: q ? `Google: ${q}.` : "Opening Google." };
     }
-
-    const openSiteMatch = text.match(/(?:open|go to|visit|navigate to)\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|https?:\/\/[^\s]+|[a-zA-Z0-9-]+)/i);
-    if (openSiteMatch && !text.includes("test") && !text.includes("filter") && !text.includes("result")) {
-      const rawSite = openSiteMatch[1].trim();
-      let url = rawSite;
-      if (!url.startsWith("http://") && !url.startsWith("https://")) {
-        url = url.includes(".") ? `https://${url}` : `https://www.${url}.com`;
-      }
-      return {
-        userGoal: userInput,
-        intentCategory: "navigate",
-        targetLabelOrText: url,
-        isConsequential: false,
-        explanation: `Navigating to ${url}.`,
-      };
+    // Website
+    const siteMatch = text.match(/(?:open|go to|visit|navigate to)\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|https?:\/\/[^\s]+)/i);
+    if (siteMatch && !text.includes("test") && !text.includes("filter")) {
+      let url = siteMatch[1]; if (!url.startsWith("http")) url = "https://" + url;
+      return { userGoal: userInput, intentCategory: "navigate", targetLabelOrText: url, isConsequential: false, explanation: `Navigating to ${url}.` };
     }
-
-    // 1. Open Application
-    const openAppMatch = text.match(/(?:open|launch|start|run)\s+(.+?)(?:\s+(?:application|app|program|software))?$/i);
-    const APP_NAMES = ["notepad","calculator","paint","chrome","edge","firefox","word","excel","powerpoint","vs code","vscode","visual studio code","spotify","vlc","zoom","whatsapp","cmd","powershell","file explorer","explorer","settings","task manager","snipping tool"];
-    if (openAppMatch) {
-      const appName = openAppMatch[1].trim().toLowerCase();
-      const matchedApp = APP_NAMES.find(a => appName.includes(a));
-      if (matchedApp || APP_NAMES.some(a => text.includes(a))) {
-        const finalApp = matchedApp || appName;
-        return {
-          userGoal: userInput,
-          intentCategory: "open_app",
-          targetLabelOrText: finalApp,
-          isConsequential: false,
-          explanation: `Opening ${finalApp} on your computer.`,
-        };
+    // Open app
+    const appNames = ["notepad", "calculator", "paint", "chrome", "edge", "firefox", "word", "excel", "powerpoint", "vs code", "vscode", "visual studio code", "spotify", "vlc", "zoom", "settings", "task manager"];
+    const appMatch = text.match(/(?:open|launch|start)\s+(.+?)(?:\s+(?:application|app|program))?$/i);
+    if (appMatch) {
+      const a = appMatch[1].trim().toLowerCase();
+      const found = appNames.find(n => a.includes(n));
+      if (found || appNames.some(n => text.includes(n))) {
+        return { userGoal: userInput, intentCategory: "open_app", targetLabelOrText: found || a, isConsequential: false, explanation: `Opening ${found || a}.` };
       }
     }
-
-    // 2. Type Text / Write Code (in currently focused window)
-    const typeMatch = userInput.match(/(?:type|write|insert|enter|input)\s+(?:the\s+)?(?:text|code|message|word|command)?\s*["""'](.+)["""']/i) ||
-                      userInput.match(/^(?:type|write|enter)\s+(.+)/i);
-    if (typeMatch) {
-      return {
-        userGoal: userInput,
-        intentCategory: "type_text",
-        targetLabelOrText: typeMatch[1].trim(),
-        isConsequential: false,
-        explanation: `Typing "${typeMatch[1].trim()}" into the active window.`,
-      };
+    // Screenshot
+    if (text.includes("screenshot") || text.includes("capture screen")) {
+      return { userGoal: userInput, intentCategory: "system_control", systemPayload: { action: "screenshot" }, isConsequential: false, explanation: "Taking a screenshot." };
     }
-
-    // 3. System Control commands
-    if (text.includes("screenshot") || text.includes("screen shot") || text.includes("capture screen")) {
-      return {
-        userGoal: userInput,
-        intentCategory: "system_control",
-        systemPayload: { action: "screenshot" },
-        isConsequential: false,
-        explanation: "Taking a screenshot and saving it to your Desktop.",
-      };
+    // Volume
+    if (text.includes("volume")) {
+      const vm = text.match(/(\d+)\s*(?:percent|%)?/); const lv = vm ? vm[1] : "50";
+      return { userGoal: userInput, intentCategory: "system_control", systemPayload: { action: "volume", level: lv }, isConsequential: false, explanation: `Volume to ${lv}%.` };
     }
-
-    if (text.includes("volume") || text.match(/(?:set|turn)\s+(?:the\s+)?(?:volume|sound)/)) {
-      const volMatch = text.match(/(\d+)\s*(?:percent|%)?/);
-      const level = volMatch ? volMatch[1] : "50";
-      return {
-        userGoal: userInput,
-        intentCategory: "system_control",
-        systemPayload: { action: "volume", level },
-        isConsequential: false,
-        explanation: `Setting system volume to ${level}%.`,
-      };
+    // Window control
+    const winMatch = text.match(/(?:minimize|maximize|maximise|close)\s+(?:the\s+)?(?:window|app)?\s*(.+)?/i);
+    if (winMatch) {
+      const ac = text.includes("minimize") ? "minimize" : text.includes("close") ? "close" : "maximize";
+      const wt = (winMatch[1] || "").trim();
+      return { userGoal: userInput, intentCategory: "system_control", systemPayload: { action: ac, window: wt }, isConsequential: ac === "close", explanation: `${ac} ${wt || "active window"}.` };
     }
-
-    const windowActionMatch = text.match(/(?:minimize|maximise|maximize|close)\s+(?:the\s+)?(?:window|app)?\s*(.+)?/i);
-    if (windowActionMatch) {
-      const action = text.includes("minimize") ? "minimize" : text.includes("close") ? "close" : "maximize";
-      const winTitle = (windowActionMatch[1] || "").trim();
-      return {
-        userGoal: userInput,
-        intentCategory: "system_control",
-        systemPayload: { action, window: winTitle },
-        isConsequential: action === "close",
-        explanation: `${action === "close" ? "Closing" : action === "minimize" ? "Minimizing" : "Maximizing"} ${winTitle || "the active window"}.`,
-      };
+    // List windows
+    if (text.includes("list") && text.includes("window")) {
+      return { userGoal: userInput, intentCategory: "system_control", systemPayload: { action: "list_windows" }, isConsequential: false, explanation: "Listing open windows." };
     }
-
-    if (text.includes("list") && (text.includes("window") || text.includes("app") || text.includes("open"))) {
-      return {
-        userGoal: userInput,
-        intentCategory: "system_control",
-        systemPayload: { action: "list_windows" },
-        isConsequential: false,
-        explanation: "Listing all open windows and applications.",
-      };
+    // Page understanding
+    if (/(?:what.*on|tell me about|explain|describe|read|summarize)\s+(?:this\s+)?(?:page|article|website|screen)/i.test(text) || text.includes("main content") || text.includes("mandatory") || text.includes("options available")) {
+      return { userGoal: userInput, intentCategory: "page_understanding", isConsequential: false, explanation: "Describing the current page." };
     }
-
-    if (text.includes("what is on") || text.includes("tell me about") || text.includes("explain") || text.includes("read")) {
-      return {
-        userGoal: userInput,
-        intentCategory: "page_understanding",
-        isConsequential: false,
-        explanation: `Analyzing page content for "${ctx?.title || "current page"}".`,
-      };
+    // Find element
+    if (/find|locate|where is|take me to|move focus/i.test(text)) {
+      const fm = userInput.match(/(?:find|locate|where is)\s+(?:the\s+)?(.+?)(?:\s+(?:button|field|filter|element))?\s*\.?$/i);
+      const td = fm ? fm[1].trim() : text;
+      if (text.includes("price")) return { userGoal: userInput, intentCategory: "find_and_focus", targetRole: "filter", targetLabelOrText: "price", targetElementDescription: "Price filter", isConsequential: false, explanation: "Locating price filter." };
+      return { userGoal: userInput, intentCategory: "find_and_focus", targetElementDescription: td, targetLabelOrText: td, isConsequential: false, explanation: `Looking for ${td}.` };
     }
-
-    if (text.includes("price filter") || text.includes("filter")) {
-      return {
-        userGoal: userInput,
-        intentCategory: "find_and_focus",
-        targetRole: "filter",
-        targetLabelOrText: "price",
-        targetElementDescription: "Price filter dropdown or control",
-        isConsequential: false,
-        explanation: "Locating the price filter control on the page.",
-      };
+    // Search results
+    if (text.includes("second result") || text.includes("compare") || text.includes("first three")) {
+      return { userGoal: userInput, intentCategory: "search_results", targetElementDescription: "Search results", isConsequential: false, explanation: "Analyzing search results." };
     }
-
-    if (text.includes("second result") || text.includes("2nd result") || text.includes("search result")) {
-      return {
-        userGoal: userInput,
-        intentCategory: "search_results",
-        targetElementDescription: "Second search result item",
-        isConsequential: false,
-        explanation: "Finding and summarizing the second result.",
-      };
+    // Consequential
+    const negSubmit = text.includes("not submit") || text.includes("don't submit") || text.includes("dont submit");
+    if (!negSubmit && (text.includes("buy") || text.includes("checkout") || text.includes("submit") || text.includes("purchase"))) {
+      return { userGoal: userInput, intentCategory: "action", isConsequential: true, explanation: "This action requires your confirmation." };
     }
-
-    const isNegativeSubmit =
-      text.includes("not submit") ||
-      text.includes("without submit") ||
-      text.includes("don't submit") ||
-      text.includes("dont submit");
-
-    if (
-      !isNegativeSubmit &&
-      (text.includes("buy") || text.includes("checkout") || text.includes("submit") || text.includes("purchase"))
-    ) {
-      return {
-        userGoal: userInput,
-        intentCategory: "action",
-        isConsequential: true,
-        explanation: "This consequential action requires explicit user confirmation before proceeding.",
-      };
-    }
-
+    // Form fill
     if (text.includes("fill") || (text.includes("form") && (text.includes("name") || text.includes("email")))) {
-      const formData: Record<string, string> = {};
-      const nameMatch = userInput.match(/name\s*(?:is|to|:)?\s*([A-Za-z\s]+?)(?:,|\.|\band\b|$)/i);
-      const emailMatch = userInput.match(/email\s*(?:is|to|:)?\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
-      if (nameMatch) formData["name"] = nameMatch[1].trim();
-      if (emailMatch) formData["email"] = emailMatch[1].trim();
-
-      return {
-        userGoal: userInput,
-        intentCategory: "form_fill",
-        formData,
-        isConsequential: false,
-        explanation: "Filling in form fields with your provided details without submitting.",
-      };
+      const fd: Record<string, string> = {};
+      const nm = userInput.match(/name\s*(?:is|to|:)?\s*([A-Za-z\s]+?)(?:,|\.| and |$)/i);
+      const em = userInput.match(/email\s*(?:is|to|:)?\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+      if (nm) fd["name"] = nm[1].trim(); if (em) fd["email"] = em[1].trim();
+      return { userGoal: userInput, intentCategory: "form_fill", formData: fd, isConsequential: false, explanation: "Filling form fields without submitting." };
     }
+    // Type text
+    const typeM = userInput.match(/^(?:type|enter)\s+(.+)/i);
+    if (typeM) return { userGoal: userInput, intentCategory: "type_text", targetLabelOrText: typeM[1].trim(), isConsequential: false, explanation: `Typing ${typeM[1].trim().slice(0, 40)}.` };
 
-    return {
-      userGoal: userInput,
-      intentCategory: "action",
-      isConsequential: false,
-      explanation: `Interpreting request: "${userInput}".`,
-    };
+    return { userGoal: userInput, intentCategory: "action", isConsequential: false, explanation: `Interpreting: ${userInput}.` };
   }
 
   private fallbackPlanTask(

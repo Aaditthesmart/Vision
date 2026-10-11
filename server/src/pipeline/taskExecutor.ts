@@ -94,6 +94,120 @@ export class TaskExecutor {
 
       // ── System Control & Voice Actions: Short-circuit for Windows-native actions ──
 
+      // Task 1: Chrome search
+      if (goal.intentCategory === "chrome_search") {
+        emit("agent_status", "executing");
+        const query = goal.targetLabelOrText || "";
+        const result = await windowsControl.openChromeAndSearch(query);
+        emit("agent_status", "idle");
+        const msg = result.success ? `✅ ${result.output}` : `❌ ${result.error}`;
+        emit("assistant_message", { role: "assistant", text: msg, speechText: msg });
+        emit("task_completed", { success: result.success, message: msg, stepsExecuted: 1 });
+        return { success: result.success, message: msg };
+      }
+
+      // Task 17: Compile and run code
+      if (goal.intentCategory === "compile_run") {
+        emit("agent_status", "executing");
+        emit("assistant_message", { role: "assistant", text: "Compiling and running your code...", speechText: "Compiling and running." });
+        const result = await windowsControl.compileAndRun();
+        emit("agent_status", "idle");
+        const msg = result.success ? `✅ Program output:\n${result.output}` : `❌ Compile/run error: ${result.error}`;
+        emit("assistant_message", { role: "assistant", text: msg, speechText: result.success ? `Program output: ${result.output?.slice(0, 200)}` : `Error: ${result.error}` });
+        emit("task_completed", { success: result.success, message: msg, stepsExecuted: 1 });
+        return { success: result.success, message: msg };
+      }
+
+      // Task 18/21: Analyze code / fix bug
+      if (goal.intentCategory === "analyze_code") {
+        emit("agent_status", "thinking");
+        const codeResult = await windowsControl.readCodeFileForAnalysis();
+        if (!codeResult.success || !codeResult.code) {
+          const errMsg = `❌ ${codeResult.error || "No code file found to analyze."}`;
+          emit("assistant_message", { role: "assistant", text: errMsg, speechText: errMsg });
+          emit("task_completed", { success: false, message: errMsg, stepsExecuted: 0 });
+          return { success: false, message: errMsg };
+        }
+        const analysis = await gemma4Engine.generateCode(`Analyze this code and explain what it does, find any bugs, and suggest fixes:\n${codeResult.code}`);
+        emit("agent_status", "idle");
+        const msg = `📋 Code Analysis: ${codeResult.fileName}\n\n${analysis.summary}`;
+        emit("assistant_message", { role: "assistant", text: msg, speechText: `Analysis of ${codeResult.fileName}: ${analysis.summary}` });
+        emit("task_completed", { success: true, message: msg, stepsExecuted: 1 });
+        return { success: true, message: msg };
+      }
+
+      // Task 22: Run tests
+      if (goal.intentCategory === "run_tests") {
+        emit("agent_status", "executing");
+        emit("assistant_message", { role: "assistant", text: "Running your tests...", speechText: "Running tests." });
+        const result = await windowsControl.runTests();
+        emit("agent_status", "idle");
+        const msg = result.success ? `✅ Test results:\n${result.output}` : `❌ Tests failed: ${result.error || result.output}`;
+        emit("assistant_message", { role: "assistant", text: msg, speechText: result.success ? `Tests completed. ${result.output?.slice(0, 150)}` : `Tests failed. ${result.error}` });
+        emit("task_completed", { success: result.success, message: msg, stepsExecuted: 1 });
+        return { success: result.success, message: msg };
+      }
+
+      // Task 19: Create Python venv project
+      if (goal.intentCategory === "create_python_project") {
+        emit("agent_status", "executing");
+        const name = goal.targetLabelOrText || "MyPythonProject";
+        emit("assistant_message", { role: "assistant", text: `Creating Python project "${name}"...`, speechText: `Creating Python project ${name}.` });
+        const result = await windowsControl.createPythonVenvProject(name);
+        emit("agent_status", "idle");
+        const msg = result.success ? `✅ ${result.output}` : `❌ ${result.error}`;
+        emit("assistant_message", { role: "assistant", text: msg, speechText: msg });
+        emit("task_completed", { success: result.success, message: msg, stepsExecuted: 1 });
+        return { success: result.success, message: msg };
+      }
+
+      // Task 20: Create website
+      if (goal.intentCategory === "create_website") {
+        emit("agent_status", "executing");
+        const name = goal.targetLabelOrText || "MyWebsite";
+        emit("assistant_message", { role: "assistant", text: `Building website "${name}"...`, speechText: `Building website ${name}.` });
+        const result = await windowsControl.createBasicWebsite(name);
+        emit("agent_status", "idle");
+        const msg = result.success ? `✅ ${result.output}` : `❌ ${result.error}`;
+        emit("assistant_message", { role: "assistant", text: msg, speechText: msg });
+        emit("task_completed", { success: result.success, message: msg, stepsExecuted: 1 });
+        return { success: result.success, message: msg };
+      }
+
+      // Tasks 23-28: File operations
+      if (goal.intentCategory === "file_ops") {
+        emit("agent_status", "executing");
+        const payload = goal.systemPayload || {};
+        const fileAction = payload.action || "";
+        let result: { success: boolean; output?: string; error?: string };
+
+        switch (fileAction) {
+          case "create_folder":
+            result = await windowsControl.createFolder(payload.folderName || "New Folder");
+            break;
+          case "find_file":
+            result = await windowsControl.findFileInDocuments(payload.query || "");
+            break;
+          case "create_notes":
+            result = await windowsControl.createNotesFile();
+            break;
+          case "recent_file":
+            result = await windowsControl.getMostRecentFile();
+            break;
+          case "open_in_vscode":
+            result = await windowsControl.openFolderInVSCode(payload.folderName || "");
+            break;
+          default:
+            result = { success: false, error: `Unknown file action: ${fileAction}` };
+        }
+
+        emit("agent_status", "idle");
+        const msg = result.success ? `✅ ${result.output}` : `❌ ${result.error}`;
+        emit("assistant_message", { role: "assistant", text: msg, speechText: msg });
+        emit("task_completed", { success: result.success, message: msg, stepsExecuted: 1 });
+        return { success: result.success, message: msg };
+      }
+
       // 1. Write Code (in VS Code with AI code generation)
       if (goal.intentCategory === "write_code") {
         emit("agent_status", "thinking");
@@ -190,7 +304,7 @@ export class TaskExecutor {
         return { success: result.success, message: msg };
       }
 
-      // 6. System control (screenshot, volume, shortcuts, window management)
+      // 6. System control (screenshot, volume, shortcuts, window management, screen reading)
       if (goal.intentCategory === "system_control") {
         emit("agent_status", "executing");
         const payload = goal.systemPayload || {};
@@ -210,6 +324,26 @@ export class TaskExecutor {
             payload.window || "",
             action as "minimize" | "maximize" | "close",
           );
+        } else if (action === "read_screen") {
+          result = await windowsControl.readScreen();
+        } else if (action === "active_window") {
+          result = await windowsControl.getActiveWindow();
+        } else if (action === "focus_window" && payload.window) {
+          result = await windowsControl.focusWindow(payload.window);
+        } else if (action === "spotify_next") {
+          result = await windowsControl.spotifyNextTrack();
+        } else if (action === "spotify_play_pause") {
+          result = await windowsControl.spotifyNextTrack(); // reuse — sends media key
+        } else if (action === "get_status") {
+          const lastMsg = "The last action completed. Use 'tell me what is on screen' to check the current state.";
+          result = { success: true, output: lastMsg };
+        } else if (action === "cancel_task") {
+          emit("agent_status", "idle");
+          this.cancelCurrentTask();
+          const cancelMsg = "Task cancelled. Ready for your next command.";
+          emit("assistant_message", { role: "assistant", text: cancelMsg, speechText: cancelMsg });
+          emit("task_completed", { success: true, message: cancelMsg, stepsExecuted: 0 });
+          return { success: true, message: cancelMsg };
         } else {
           result = { success: false, error: "Unknown system action: " + action };
         }

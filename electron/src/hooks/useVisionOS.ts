@@ -264,12 +264,30 @@ export function useVisionOS() {
     };
   }, [speakText]);
 
+  // Send natural language goal — declared BEFORE startListening so it can be in its dep array
+  const sendGoal = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || !socketRef.current) return;
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        role: "user",
+        text: trimmed,
+        timestamp: Date.now(),
+      },
+    ]);
+
+    socketRef.current.emit("user_message", { text: trimmed });
+  }, []);
+
   // Start Voice Listening (Tries Native Windows speech first, fallback to Web Speech)
   const startListening = useCallback(() => {
     playAudioTone("start");
     setIsListening(true);
 
-    if (socketRef.current && socketConnected) {
+    if (socketRef.current) {
       socketRef.current.emit("start_voice");
     }
 
@@ -279,34 +297,53 @@ export function useVisionOS() {
     if (SpeechRecognition) {
       try {
         const recognition = new SpeechRecognition();
-        recognition.continuous = false;
+        recognition.continuous = true;  // keep session open until user stops
         recognition.interimResults = true;
         recognition.lang = "en-US";
+        recognition.maxAlternatives = 1;
 
-        recognition.onstart = () => setIsListening(true);
-        recognition.onend = () => setIsListening(false);
-        recognition.onerror = () => {
-          // Non-fatal because backend native listener is active
+        recognition.onstart = () => {
+          setIsListening(true);
         };
 
         recognition.onresult = (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          if (transcript) {
-            setInterimSpeech(transcript);
-            if (event.results[0].isFinal) {
-              sendGoal(transcript);
-              setIsListening(false);
+          // Walk all new results
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (transcript) {
+              if (event.results[i].isFinal) {
+                sendGoal(transcript);
+                setInterimSpeech("");
+              } else {
+                setInterimSpeech(transcript);
+              }
             }
+          }
+        };
+
+        // Suppress premature close — continuous mode handles cleanup
+        recognition.onerror = (e: any) => {
+          console.warn("[SpeechRecognition] error:", e.error);
+          // Only stop listening state on fatal errors
+          if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+            setIsListening(false);
+          }
+        };
+        recognition.onend = () => {
+          // If still supposed to be listening, restart immediately
+          if (recognitionRef.current) {
+            try { recognitionRef.current.start(); } catch { /* already started */ }
           }
         };
 
         recognitionRef.current = recognition;
         recognition.start();
-      } catch {
-        // Backend native listener handles this
+      } catch (err) {
+        console.warn("[SpeechRecognition] Could not start:", err);
+        // Backend native Windows listener handles this fallback
       }
     }
-  }, [socketConnected]);
+  }, [sendGoal]);
 
   const stopListening = useCallback(() => {
     playAudioTone("stop");
@@ -325,24 +362,6 @@ export function useVisionOS() {
       }
       recognitionRef.current = null;
     }
-  }, []);
-
-  // Send natural language goal
-  const sendGoal = useCallback((text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || !socketRef.current) return;
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        role: "user",
-        text: trimmed,
-        timestamp: Date.now(),
-      },
-    ]);
-
-    socketRef.current.emit("user_message", { text: trimmed });
   }, []);
 
   // Approve / Decline Consequential Action

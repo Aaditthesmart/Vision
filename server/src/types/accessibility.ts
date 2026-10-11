@@ -77,6 +77,13 @@ export const GoalInterpretationSchema = z.object({
     "write_code",     // Write code into VS Code or text editor
     "system_control", // System-level commands: volume, screenshot, window control, shortcuts
     "run_command",    // Run a safe shell/PowerShell command
+    "chrome_search",  // Open Chrome and search Google
+    "compile_run",    // Compile and run current code file
+    "analyze_code",   // Explain/fix/find bugs in code
+    "run_tests",      // Run project tests
+    "create_python_project", // Create Python project with venv
+    "create_website", // Build HTML/CSS/JS website
+    "file_ops",       // File operations: create folder, find file, notes, recent file
   ]),
   targetElementDescription: z.string().nullable().optional().describe("Description of element or area to interact with"),
   targetRole: z.string().nullable().optional().describe("Role like button, link, textbox, filter"),

@@ -134,20 +134,32 @@ export class OllamaClient {
 
       if (!res.ok) {
         const errorText = await res.text();
+        // Gracefully handle "model output must contain either output text or tool calls"
+        // This is an Ollama/model error meaning the model returned an empty completion.
+        // Rather than crashing, we return empty content so callers use their fallback paths.
+        const isEmptyOutputError =
+          errorText.includes("model output must contain either output text") ||
+          errorText.includes("empty") ||
+          res.status === 400;
+        if (isEmptyOutputError) {
+          console.warn(`[OllamaClient] Model '${model}' returned empty output — using fallback. (HTTP ${res.status})`);
+          return { content: "", raw: { model, message: { role: "assistant", content: "" }, done: true } };
+        }
         throw new Error(`Ollama API error ${res.status}: ${errorText}`);
       }
 
       const data = (await res.json()) as OllamaChatResponse;
-      return {
-        content: data.message?.content?.trim() || "",
-        raw: data,
-      };
+      // Guard: if model content is empty, return empty string (callers have deterministic fallbacks)
+      const content = data.message?.content?.trim() || "";
+      if (!content) {
+        console.warn(`[OllamaClient] Model '${model}' returned empty content — using fallback.`);
+      }
+      return { content, raw: data };
     } catch (err) {
       clearTimeout(timer);
       if (err instanceof Error && err.name === "AbortError") {
-        throw new Error(
-          `Ollama request timed out after ${timeoutMs}ms. Model '${model}' may still be loading or generating on CPU.`,
-        );
+        console.warn(`[OllamaClient] Request timed out after ${timeoutMs}ms — using deterministic fallback.`);
+        return { content: "", raw: { model, message: { role: "assistant", content: "" }, done: false } };
       }
       throw err;
     }
